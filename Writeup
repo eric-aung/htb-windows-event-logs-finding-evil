@@ -1,0 +1,46 @@
+# Windows Event Logs & Finding Evil — Concise Writeup
+
+**Platform:** HackTheBox Academy — Windows Event Logs & Finding Evil  
+**Author:** @eric_aung  
+**Status:** Completed
+
+---
+
+## TL;DR
+Analyzed exported `.evtx` logs (Sysmon + Windows Event Logs + ETW) to detect core Windows attack techniques: **DLL hijack**, **unmanaged PowerShell/.NET injection**, **LSASS dumping**, and **PPID spoofing**.
+
+---
+
+## Findings 
+
+### 1) DLL hijacking — Sysmon Event ID 7  
+**What to look for:** ImageLoaded events where a system DLL (e.g. `WININET.dll`) is loaded from a writable path instead of `C:\Windows\System32`.  
+**Result (lab):** `Dism.exe` (responsible process) loaded an unsigned DLL from a writable location.  
+
+---
+
+### 2) Unmanaged PowerShell / .NET injection (CLR loads)  
+**What to look for:** `clr.dll` / `mscoree.dll` loaded inside native processes (indicates .NET payload or injection).  
+**Result (lab):** `Calculator.exe` showed CLR loads; injector observed as `rundll32.exe`.  
+
+---
+
+### 3) LSASS dump / credential access — Sysmon Event ID 10  
+**What to look for:** ProcessAccess events targeting `lsass.exe` (unusual SourceImage + suspicious access mask).  
+**Result (lab):** `ProcessHacker.exe` accessed `lsass.exe` (dump-like behavior). No follow-up malicious logon observed.  
+
+
+
+
+---
+
+### 4) PPID spoofing / strange parent-child  
+**What to look for:** Implausible parent→child in Sysmon ProcessCreate (EventID 1); confirm with ETW kernel provider for true creator.  
+**Result (lab):** True creator revealed as `WerFault.exe` via ETW (PPID spoofing used to hide lineage).  
+
+---
+
+## Quick commands (copy-paste)
+Filter Sysmon ImageLoad (DLL loads):
+```powershell
+Get-WinEvent -Path 'C:\Logs\DLLHijack\sysmon.evtx' -FilterHashtable @{Id=7}
